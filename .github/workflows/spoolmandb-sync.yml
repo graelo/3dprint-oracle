@@ -104,7 +104,15 @@ jobs:
         id: pack
         run: |
           npm run build
-          tarball="$(npm pack)"
+          # npm pack's stdout includes prepare/log chatter; pick the
+          # artifact from the workspace instead.
+          npm pack > pack.log 2>&1
+          tarball="$(ls -t ./*.tgz | head -1)"
+          if [ -z "${tarball:-}" ] || [ ! -f "$tarball" ]; then
+            echo "npm pack produced no tarball:" >&2
+            cat pack.log >&2
+            exit 1
+          fi
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
 
       - name: Record provenance and commit updated database
@@ -157,7 +165,11 @@ jobs:
           NEW_SHORT: ${{ steps.head.outputs.short }}
           PREVIOUS_SHA: ${{ steps.commit.outputs.previous }}
           SUMMARY: ${{ steps.commit.outputs.summary }}
+          STABLE_ASSET: 3dprint-oracle-latest.tgz
         run: |
+          # Also publish the tarball under a stable asset name so that
+          # releases/latest/download/<name> is a permanent, versionless URL.
+          cp "$TARBALL" "$STABLE_ASSET"
           {
             echo "### Data refresh from SpoolmanDB"
             echo ""
@@ -168,13 +180,19 @@ jobs:
             echo ""
             echo "**Ingested data:** $SUMMARY"
             echo ""
-            echo "**Attachment:** \`$TARBALL\` — npm package tarball (built + tested), with the refreshed database embedded:"
+            echo "**Attachments:**"
+            echo "- \`$STABLE_ASSET\` — stable-name copy of the npm tarball (built + tested, refreshed database embedded):"
+            echo ""
+            echo '```'
+            echo "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/$STABLE_ASSET"
+            echo '```'
+            echo "- \`$TARBALL\` — versioned npm tarball name, e.g. for:"
             echo ""
             echo '```'
             echo "npx -y $TARBALL"
             echo '```'
           } > release-notes.md
-          gh release create "$TAG" "$TARBALL" --title "$TAG" --notes-file release-notes.md
+          gh release create "$TAG" "$STABLE_ASSET" "$TARBALL" --title "$TAG" --notes-file release-notes.md
 
       - name: Summary (released)
         if: steps.check.outputs.changed == 'true'
