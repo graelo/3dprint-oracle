@@ -14,3 +14,6 @@ dist/
 
 # MCP QA reports (per-session artefacts)
 .mcp-qa/
+
+# Local pack output
+*.tgz

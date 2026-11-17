@@ -1,0 +1,190 @@
+# Rebuild the embedded database when upstream Donkie/SpoolmanDB changes,
+# then publish a date-tagged GitHub Release with the packaged npm tarball.
+#
+# Usage:
+# - Daily check (schedule, 06:00 UTC): rebuilds only if SpoolmanDB's main
+#   HEAD differs from the SHA recorded in .spoolmandb-head.
+# - Manual run (workflow_dispatch): same check unless "force" is set.
+#
+# Notes:
+# - Commits pushed with the default GITHUB_TOKEN do not re-trigger the CI
+#   workflow (GitHub limitation), but the full build+test suite runs here
+#   before anything is committed or released.
+
+name: SpoolmanDB Sync
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild even if SpoolmanDB HEAD is unchanged"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: spoolmandb-sync
+  cancel-in-progress: false
+
+env:
+  SPOOLMANDB_REPO: Donkie/SpoolmanDB
+  PROVENANCE_FILE: .spoolmandb-head
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Get SpoolmanDB HEAD
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha="$(gh api "repos/${SPOOLMANDB_REPO}/commits/main" --jq '.sha')"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short=${sha:0:8}" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether SpoolmanDB changed
+        id: check
+        env:
+          NEW_SHA: ${{ steps.head.outputs.sha }}
+          FORCE: ${{ inputs.force == true }}
+        run: |
+          if [ "$FORCE" = "true" ]; then
+            echo "Force rebuild requested."
+            changed=true
+          elif [ ! -f "$PROVENANCE_FILE" ]; then
+            echo "No recorded SpoolmanDB HEAD; treating as changed."
+            changed=true
+          elif [ "$(cat "$PROVENANCE_FILE")" = "$NEW_SHA" ]; then
+            echo "SpoolmanDB unchanged at $NEW_SHA — nothing to do."
+            changed=false
+          else
+            changed=true
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Summary (no changes)
+        if: steps.check.outputs.changed == 'false'
+        env:
+          NEW_SHA: ${{ steps.head.outputs.sha }}
+        run: |
+          {
+            echo "### SpoolmanDB Sync: no changes"
+            echo "Upstream [\`${SPOOLMANDB_REPO}\`](https://github.com/${SPOOLMANDB_REPO}) is unchanged at \`${NEW_SHA}\`. No rebuild needed."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v6
+        if: steps.check.outputs.changed == 'true'
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.check.outputs.changed == 'true'
+        run: npm ci
+
+      - name: Rebuild database from SpoolmanDB
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          npm run fetch-data 2>&1 | tee fetch-data.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Test
+        if: steps.check.outputs.changed == 'true'
+        run: npm test
+
+      - name: Build and pack release tarball
+        if: steps.check.outputs.changed == 'true'
+        id: pack
+        run: |
+          npm run build
+          tarball="$(npm pack)"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Record provenance and commit updated database
+        if: steps.check.outputs.changed == 'true'
+        id: commit
+        env:
+          NEW_SHA: ${{ steps.head.outputs.sha }}
+        run: |
+          prev="$(cat "$PROVENANCE_FILE" 2>/dev/null || true)"
+          echo "previous=${prev:-<none>}" >> "$GITHUB_OUTPUT"
+
+          summary="$(grep -E '^Done:' fetch-data.log | tail -1)"
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
+
+          echo "$NEW_SHA" > "$PROVENANCE_FILE"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/3dprint.sqlite "$PROVENANCE_FILE"
+          git commit \
+            -m "chore(data): rebuild from SpoolmanDB@${NEW_SHA:0:8}" \
+            -m "$summary"
+          git push
+
+      - name: Tag release
+        if: steps.check.outputs.changed == 'true'
+        id: tag
+        env:
+          NEW_SHA: ${{ steps.head.outputs.sha }}
+        run: |
+          base="data-$(date -u +%Y-%m-%d)"
+          # If the daily tag already exists (e.g. a forced same-day rerun),
+          # disambiguate with the SpoolmanDB short SHA.
+          if git ls-remote --exit-code origin "refs/tags/$base" >/dev/null 2>&1; then
+            tag="$base-${NEW_SHA:0:8}"
+          else
+            tag="$base"
+          fi
+          git tag "$tag"
+          git push origin "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+          NEW_SHA: ${{ steps.head.outputs.sha }}
+          NEW_SHORT: ${{ steps.head.outputs.short }}
+          PREVIOUS_SHA: ${{ steps.commit.outputs.previous }}
+          SUMMARY: ${{ steps.commit.outputs.summary }}
+        run: |
+          {
+            echo "### Data refresh from SpoolmanDB"
+            echo ""
+            echo "**Upstream SpoolmanDB commit:** [\`$NEW_SHORT\`](https://github.com/$SPOOLMANDB_REPO/commit/$NEW_SHA)"
+            echo ""
+            echo "Full SHA: \`$NEW_SHA\`"
+            echo "Previously recorded commit: \`$PREVIOUS_SHA\`"
+            echo ""
+            echo "**Ingested data:** $SUMMARY"
+            echo ""
+            echo "**Attachment:** \`$TARBALL\` — npm package tarball (built + tested), with the refreshed database embedded:"
+            echo ""
+            echo '```'
+            echo "npx -y $TARBALL"
+            echo '```'
+          } > release-notes.md
+          gh release create "$TAG" "$TARBALL" --title "$TAG" --notes-file release-notes.md
+
+      - name: Summary (released)
+        if: steps.check.outputs.changed == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          NEW_SHA: ${{ steps.head.outputs.sha }}
+          SUMMARY: ${{ steps.commit.outputs.summary }}
+        run: |
+          {
+            echo "### SpoolmanDB Sync: released \`${TAG}\`"
+            echo "- SpoolmanDB commit: [\`${NEW_SHA:0:8}\`](https://github.com/${SPOOLMANDB_REPO}/commit/${NEW_SHA})"
+            echo "- ${SUMMARY}"
+          } >> "$GITHUB_STEP_SUMMARY"
