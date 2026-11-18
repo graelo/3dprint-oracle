@@ -1,13 +1,12 @@
-<!-- mcp-name: io.github.gregario/3dprint-oracle -->
+<!-- mcp-name: io.github.graelo/3dprint-oracle -->
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/3dprint-oracle"><img src="https://img.shields.io/npm/v/3dprint-oracle.svg" alt="npm version"></a>
-  <a href="https://www.npmjs.com/package/3dprint-oracle"><img src="https://img.shields.io/npm/dm/3dprint-oracle.svg" alt="npm downloads"></a>
+  <a href="https://www.npmjs.com/package/@graelo/3dprint-oracle"><img src="https://img.shields.io/npm/v/@graelo/3dprint-oracle.svg" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/@graelo/3dprint-oracle"><img src="https://img.shields.io/npm/dm/@graelo/3dprint-oracle.svg" alt="npm downloads"></a>
+  <a href="https://github.com/graelo/3dprint-oracle/releases"><img src="https://img.shields.io/github/v/release/graelo/3dprint-oracle.svg?label=data%20release" alt="latest data release"></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg" alt="Node.js 18+"></a>
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-compatible-purple.svg" alt="MCP Compatible"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
-  <a href="https://github.com/sponsors/gregario"><img src="https://img.shields.io/badge/sponsor-♥-ea4aaa.svg" alt="Sponsor"></a>
-  <a href="https://glama.ai/mcp/servers/gregario/3dprint-oracle"><img src="https://glama.ai/mcp/servers/gregario/3dprint-oracle/badges/score.svg" alt="3dprint-oracle MCP server"></a>
 </p>
 
 # 3dprint-oracle
