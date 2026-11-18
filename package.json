@@ -1,5 +1,5 @@
 {
-  "name": "3dprint-oracle",
+  "name": "@graelo/3dprint-oracle",
   "version": "0.1.2",
   "description": "3D printing filament and materials knowledge MCP server",
   "type": "module",
@@ -35,11 +35,11 @@
   "mcpName": "io.github.gregario/3dprint-oracle",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gregario/3dprint-oracle.git"
+    "url": "git+https://github.com/graelo/3dprint-oracle.git"
   },
-  "homepage": "https://github.com/gregario/3dprint-oracle#readme",
+  "homepage": "https://github.com/graelo/3dprint-oracle#readme",
   "bugs": {
-    "url": "https://github.com/gregario/3dprint-oracle/issues"
+    "url": "https://github.com/graelo/3dprint-oracle/issues"
   },
   "author": "gregario",
   "license": "MIT",

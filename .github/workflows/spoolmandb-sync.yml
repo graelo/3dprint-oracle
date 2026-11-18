@@ -99,6 +99,14 @@ jobs:
         if: steps.check.outputs.changed == 'true'
         run: npm test
 
+      - name: Bump version
+        if: steps.check.outputs.changed == 'true'
+        id: bump
+        run: |
+          npm version patch --no-git-tag-version
+          new="$(jq -r .version package.json)"
+          echo "version=$new" >> "$GITHUB_OUTPUT"
+
       - name: Build and pack release tarball
         if: steps.check.outputs.changed == 'true'
         id: pack
@@ -131,7 +139,8 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/data/3dprint.sqlite "$PROVENANCE_FILE"
+          git add src/data/3dprint.sqlite "$PROVENANCE_FILE" \
+            package.json package-lock.json
           git commit \
             -m "chore(data): rebuild from SpoolmanDB@${NEW_SHA:0:8}" \
             -m "$summary"
@@ -165,7 +174,7 @@ jobs:
           NEW_SHORT: ${{ steps.head.outputs.short }}
           PREVIOUS_SHA: ${{ steps.commit.outputs.previous }}
           SUMMARY: ${{ steps.commit.outputs.summary }}
-          STABLE_ASSET: 3dprint-oracle-latest.tgz
+          STABLE_ASSET: graelo-3dprint-oracle-latest.tgz
         run: |
           # Also publish the tarball under a stable asset name so that
           # releases/latest/download/<name> is a permanent, versionless URL.
@@ -180,19 +189,34 @@ jobs:
             echo ""
             echo "**Ingested data:** $SUMMARY"
             echo ""
+            echo "**Published to npm:** [\`@graelo/3dprint-oracle@${VERSION}\`](https://www.npmjs.com/package/@graelo/3dprint-oracle) — automatically picked up by \`npx -y @graelo/3dprint-oracle\`:"
+            echo ""
+            echo '```'
+            echo "npx -y @graelo/3dprint-oracle"
+            echo '```'
+            echo ""
             echo "**Attachments:**"
             echo "- \`$STABLE_ASSET\` — stable-name copy of the npm tarball (built + tested, refreshed database embedded):"
             echo ""
             echo '```'
             echo "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/$STABLE_ASSET"
             echo '```'
-            echo "- \`$TARBALL\` — versioned npm tarball name, e.g. for:"
-            echo ""
-            echo '```'
-            echo "npx -y $TARBALL"
-            echo '```'
+            echo "- \`$TARBALL\` — versioned npm tarball name."
           } > release-notes.md
           gh release create "$TAG" "$STABLE_ASSET" "$TARBALL" --title "$TAG" --notes-file release-notes.md
+
+      - name: Publish to npm
+        if: steps.check.outputs.changed == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::warning::NPM_TOKEN secret is not set — skipping npm publish"
+            exit 0
+          fi
+          npm publish --access public
+          echo "@graelo/3dprint-oracle@${VERSION} published" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summary (released)
         if: steps.check.outputs.changed == 'true'
@@ -200,9 +224,10 @@ jobs:
           TAG: ${{ steps.tag.outputs.tag }}
           NEW_SHA: ${{ steps.head.outputs.sha }}
           SUMMARY: ${{ steps.commit.outputs.summary }}
+          VERSION: ${{ steps.bump.outputs.version }}
         run: |
+          echo "### SpoolmanDB Sync: released \`${TAG}\` (npm: @graelo/3dprint-oracle@${VERSION})" >> "$GITHUB_STEP_SUMMARY"
           {
-            echo "### SpoolmanDB Sync: released \`${TAG}\`"
             echo "- SpoolmanDB commit: [\`${NEW_SHA:0:8}\`](https://github.com/${SPOOLMANDB_REPO}/commit/${NEW_SHA})"
             echo "- ${SUMMARY}"
           } >> "$GITHUB_STEP_SUMMARY"

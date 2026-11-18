@@ -12,31 +12,55 @@
 
 # 3dprint-oracle
 
-3D printing filament and materials knowledge MCP server. Gives LLMs authoritative access to 7,000+ filaments and curated material science knowledge.
+3D printing filament and materials knowledge MCP server. Gives LLMs authoritative access to 9,700+ filament listings and curated material science knowledge.
+
+> **This fork** ([graelo/3dprint-oracle](https://github.com/graelo/3dprint-oracle)) keeps the embedded database automatically in sync with upstream [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) — see [Automatic data refresh](#automatic-data-refresh) below.
 
 ## Features
 
-- **7,000+ filaments** from SpoolmanDB (53 manufacturers, 33 material types)
+- **9,760 filament listings** from SpoolmanDB (87 manufacturers, 82 material types)
 - **Material science knowledge** — properties, troubleshooting, recommendations
 - **8 MCP tools** — search, lookup, compare, recommend, diagnose
 - **Embedded data** — no API keys, no network calls at runtime
+- **Automatic data refresh** — daily check for SpoolmanDB updates, rebuild + release on change
 
 ## Installation
 
-### Claude Desktop
-
-Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+The fork is published to npm as [`@graelo/3dprint-oracle`](https://www.npmjs.com/package/@graelo/3dprint-oracle) with a new semver version per data refresh — `npx` checks the registry on every start and auto-installs new versions, so you always run the latest data. Add to `~/.config/pi/agent/mcp.json` (same shape for any MCP client):
 
 ```json
 {
   "mcpServers": {
     "3dprint-oracle": {
       "command": "npx",
-      "args": ["-y", "3dprint-oracle"]
+      "args": ["-y", "@graelo/3dprint-oracle"],
+      "exposure": "codemode",
+      "description": "Search 3D printing filament materials database"
     }
   }
 }
 ```
+
+### Precompiled tarball (no build step)
+
+Every data refresh also publishes a prebuilt npm tarball — dist files, database embedded, runtime dependencies excluded — under a stable, version-free URL:
+
+```
+https://github.com/graelo/3dprint-oracle/releases/latest/download/graelo-3dprint-oracle-latest.tgz
+```
+
+## Automatic data refresh
+
+The [SpoolmanDB Sync workflow](.github/workflows/spoolmandb-sync.yml) runs daily (06:00 UTC) and compares upstream [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) `main` HEAD against the SHA recorded in [`.spoolmandb-head`](.spoolmandb-head). When upstream changes, it:
+
+1. Rebuilds `src/data/3dprint.sqlite` (`npm run fetch-data`)
+2. Runs the full test suite
+3. Bumps the npm version (`npm version patch`) so the refresh can be published
+4. Commits the refreshed database + provenance SHA + version bump to `main`
+5. Publishes a `data-<date>` GitHub Release with the upstream SpoolmanDB commit SHA in the release notes (provenance), plus `graelo-3dprint-oracle-latest.tgz` (stable-name copy of the npm tarball) and `graelo-3dprint-oracle-<version>.tgz`
+6. Publishes `@graelo/3dprint-oracle@<version>` to npm (requires the `NPM_TOKEN` repository secret; the step emits a warning and is skipped when absent)
+
+Manual runs are available via `workflow_dispatch` (Actions → SpoolmanDB Sync → Run workflow), with a `force` option to rebuild even when upstream has not changed.
 
 ## Tools
 
