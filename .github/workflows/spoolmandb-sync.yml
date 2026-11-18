@@ -217,7 +217,8 @@ jobs:
           # No token: authenticated via the GitHub Actions OIDC token after
           # configuring this workflow as a trusted publisher on npmjs.com
           # (package Settings → Trusted publishing → GitHub Actions).
-          npm publish --access public
+          # Access defaults to public via package.json publishConfig.
+          npm publish
           echo "@graelo/3dprint-oracle@${VERSION} published (OIDC)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summary (released)
