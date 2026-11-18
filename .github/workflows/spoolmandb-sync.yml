@@ -25,6 +25,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write # OIDC for npm trusted publishing
 
 concurrency:
   group: spoolmandb-sync
@@ -79,11 +80,14 @@ jobs:
             echo "Upstream [\`${SPOOLMANDB_REPO}\`](https://github.com/${SPOOLMANDB_REPO}) is unchanged at \`${NEW_SHA}\`. No rebuild needed."
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Node 24: trusted publishing requires npm >= 11.5.1, which ships
+      # with Node 24 (npm CLI auto-detects the OIDC environment).
       - uses: actions/setup-node@v6
         if: steps.check.outputs.changed == 'true'
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
+          registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
         if: steps.check.outputs.changed == 'true'
@@ -205,18 +209,16 @@ jobs:
           } > release-notes.md
           gh release create "$TAG" "$STABLE_ASSET" "$TARBALL" --title "$TAG" --notes-file release-notes.md
 
-      - name: Publish to npm
+      - name: Publish to npm (OIDC trusted publishing)
         if: steps.check.outputs.changed == 'true'
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           VERSION: ${{ steps.bump.outputs.version }}
         run: |
-          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "::warning::NPM_TOKEN secret is not set — skipping npm publish"
-            exit 0
-          fi
+          # No token: authenticated via the GitHub Actions OIDC token after
+          # configuring this workflow as a trusted publisher on npmjs.com
+          # (package Settings → Trusted publishing → GitHub Actions).
           npm publish --access public
-          echo "@graelo/3dprint-oracle@${VERSION} published" >> "$GITHUB_STEP_SUMMARY"
+          echo "@graelo/3dprint-oracle@${VERSION} published (OIDC)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summary (released)
         if: steps.check.outputs.changed == 'true'

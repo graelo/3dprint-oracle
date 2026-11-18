@@ -58,7 +58,7 @@ The [SpoolmanDB Sync workflow](.github/workflows/spoolmandb-sync.yml) runs daily
 3. Bumps the npm version (`npm version patch`) so the refresh can be published
 4. Commits the refreshed database + provenance SHA + version bump to `main`
 5. Publishes a `data-<date>` GitHub Release with the upstream SpoolmanDB commit SHA in the release notes (provenance), plus `graelo-3dprint-oracle-latest.tgz` (stable-name copy of the npm tarball) and `graelo-3dprint-oracle-<version>.tgz`
-6. Publishes `@graelo/3dprint-oracle@<version>` to npm (requires the `NPM_TOKEN` repository secret; the step emits a warning and is skipped when absent)
+6. Publishes `@graelo/3dprint-oracle@<version>` to npm via [trusted publishing](https://docs.npmjs.com/trusted-publishers/) (GitHub Actions OIDC — no long-lived tokens; requires the workflow to be configured as a trusted publisher in the package settings on npmjs.com, with `npm publish` ticked under allowed actions)
 
 Manual runs are available via `workflow_dispatch` (Actions → SpoolmanDB Sync → Run workflow), with a `force` option to rebuild even when upstream has not changed.
 
